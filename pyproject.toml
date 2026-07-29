@@ -1,0 +1,46 @@
+[build-system]
+requires = ["flit_core>=3.11,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "music-bio"
+version = "0.1.0"
+description = "Show the current Yandex Music track and synced lyrics in Telegram Bio."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "uns1d" }]
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "python-dotenv>=1.0,<2",
+    "telethon==1.44.0",
+    "yandex-music==3.0.0",
+    "winsdk==1.0.0b10; sys_platform == 'win32'",
+    "python-socks[asyncio]>=2.7,<3",
+
+]
+
+[project.urls]
+Homepage = "https://github.com/uns1d/music-bio"
+Issues = "https://github.com/uns1d/music-bio/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-asyncio>=0.23,<2",
+    "ruff>=0.3",
+]
+
+[project.scripts]
+music-bio = "music_bio.app:main"
+
+[tool.pytest.ini_options]
+addopts = "-ra -q"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
