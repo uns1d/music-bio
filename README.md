@@ -50,6 +50,28 @@ YANDEX_MUSIC_TOKEN=your_yandex_music_token_here
 Файлы `.env` и `*.session` содержат секретные данные и уже добавлены в
 `.gitignore`.
 
+## Подключение через MTProxy
+
+Если Telegram доступен напрямую, оставьте переменные `TELEGRAM_PROXY_*`
+пустыми.
+
+Для ссылки вида:
+
+```text
+tg://proxy?server=proxy.example.com&port=443&secret=your_mtproxy_secret
+```
+
+настройки в `.env` будут выглядеть так:
+
+```dotenv
+TELEGRAM_PROXY_HOST=proxy.example.com
+TELEGRAM_PROXY_PORT=443
+TELEGRAM_PROXY_SECRET=your_mtproxy_secret
+```
+
+Не публикуйте настоящий адрес и секрет прокси. После изменения `.env`
+перезапустите приложение.
+
 ## Запуск
 
 Сначала проверьте, видит ли Windows медиасессию Яндекс Музыки:
