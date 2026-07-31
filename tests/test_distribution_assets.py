@@ -35,9 +35,21 @@ def test_extension_permissions_are_limited_to_yandex_music_and_localhost():
 
 def test_release_build_creates_app_and_extension_artifacts():
     script = (ROOT / "scripts" / "build.ps1").read_text(encoding="utf-8")
+    deploy_config = (ROOT / "scripts" / "pysidedeploy.spec").read_text(encoding="utf-8")
 
     assert "MusicBio-$projectVersion-Windows.exe" in script
     assert "MusicBio-Yandex-Bridge-$extensionVersion.zip" in script
+    assert '$env:PATH = "$venvScripts;$env:PATH"' in script
+    assert 'Join-Path $venvScripts "pyside6-qmlimportscanner.exe"' in script
+    assert "setuptools>=70" in script
+    assert "git archive --format=zip" in script
+    assert 'Join-Path $projectRoot "build\\release-stage"' in script
+    assert 'Join-Path $buildRoot "extension"' in script
+    assert "Remove-Item -LiteralPath $extensionStage" in script
+    assert "--config-file $deployConfig" in script
+    assert "Nuitka==4.1.3" in deploy_config
+    assert "--windows-console-mode=disable" in deploy_config
+    assert "--assume-yes-for-downloads" in deploy_config
     assert "release" in (ROOT / ".gitignore").read_text(encoding="utf-8")
 
 
