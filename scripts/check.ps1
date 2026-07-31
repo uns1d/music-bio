@@ -19,10 +19,10 @@ function Invoke-Checked {
 
 $python = ".\.venv\Scripts\python.exe"
 if (-not (Test-Path $python)) {
-    throw "Окружение не найдено. Сначала выполните .\scripts\install.ps1"
+    throw "Virtual environment not found. Run .\scripts\install.ps1 first."
 }
 
-Invoke-Checked { & $python -m compileall src tests } "Проверка синтаксиса"
+Invoke-Checked { & $python -m compileall src tests } "Python syntax check"
 Invoke-Checked { & $python -m ruff check . } "Ruff check"
 Invoke-Checked { & $python -m ruff format --check . } "Ruff format"
 Get-ChildItem src/music_bio/gui/qml/*.qml |
@@ -46,10 +46,10 @@ if ($node) {
     Invoke-Checked { node browser-extension/tests/options.test.cjs } "Options tests"
     Invoke-Checked { node browser-extension/tests/page-player.test.cjs } "Page player tests"
 } else {
-    Write-Warning "Node.js не найден: тесты браузерного расширения пропущены."
+    Write-Warning "Node.js not found; browser extension tests were skipped."
 }
 
 Invoke-Checked { & $python -m pytest } "Pytest"
 
 Write-Host ""
-Write-Host "Все проверки пройдены." -ForegroundColor Green
+Write-Host "All checks passed." -ForegroundColor Green
