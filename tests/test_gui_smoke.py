@@ -5,17 +5,14 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Qt smoke test")
-def test_qml_application_window_loads(tmp_path, monkeypatch):
-    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-
+def test_qml_application_window_loads(tmp_path, qt_application):
     from PySide6.QtCore import QUrl
     from PySide6.QtQml import QQmlApplicationEngine
-    from PySide6.QtWidgets import QApplication
 
     from music_bio.gui.controller import AppController
     from music_bio.storage import MemorySecretBackend, SettingsStore
 
-    qt_application = QApplication.instance() or QApplication([])
+    assert qt_application is not None
     controller = AppController(SettingsStore(tmp_path, MemorySecretBackend()))
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", controller)

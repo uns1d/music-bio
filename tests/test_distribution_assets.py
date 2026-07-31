@@ -52,3 +52,21 @@ def test_overlay_is_independent_movable_and_resizable():
     assert "saveOverlayGeometry" in qml
     assert "overlay.locked" not in qml
     assert 'text: overlay.locked ? "◆"' not in qml
+
+
+def test_check_script_propagates_external_command_failures():
+    script = (ROOT / "scripts" / "check.ps1").read_text(encoding="utf-8")
+
+    assert "function Invoke-Checked" in script
+    assert "$LASTEXITCODE -ne 0" in script
+    assert 'Invoke-Checked { & $python -m pytest } "Pytest"' in script
+
+
+def test_ci_uses_one_headless_qt_session_on_each_python_version():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "actions/checkout@v6" in workflow
+    assert "actions/setup-python@v6" in workflow
+    assert "QT_QPA_PLATFORM: offscreen" in workflow
+    assert "QT_QUICK_BACKEND: software" in workflow
+    assert "fail-fast: false" in workflow

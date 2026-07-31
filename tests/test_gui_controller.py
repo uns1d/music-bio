@@ -6,17 +6,8 @@ import pytest
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows Qt controller test")
 
 if sys.platform == "win32":
-    from PySide6.QtCore import QCoreApplication
-
     from music_bio.gui.controller import AppController
     from music_bio.storage import MemorySecretBackend, SettingsStore
-
-
-@pytest.fixture(autouse=True)
-def qt_application():
-    if sys.platform == "win32":
-        return QCoreApplication.instance() or QCoreApplication([])
-    return None
 
 
 def connection_values():
@@ -35,7 +26,8 @@ def connection_values():
     }
 
 
-def test_saving_connections_restarts_running_engine(tmp_path):
+def test_saving_connections_restarts_running_engine(tmp_path, qt_application):
+    assert qt_application is not None
     controller = AppController(SettingsStore(tmp_path, MemorySecretBackend()))
     runtime = MagicMock()
     runtime.running = True
@@ -50,7 +42,8 @@ def test_saving_connections_restarts_running_engine(tmp_path):
     controller._cancel_pending_restart()
 
 
-def test_saving_connections_does_not_start_stopped_engine(tmp_path):
+def test_saving_connections_does_not_start_stopped_engine(tmp_path, qt_application):
+    assert qt_application is not None
     controller = AppController(SettingsStore(tmp_path, MemorySecretBackend()))
     runtime = MagicMock()
     runtime.running = False
