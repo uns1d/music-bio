@@ -36,6 +36,23 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
+      - name: Check QML
+        shell: pwsh
+        run: |
+          Get-ChildItem src/music_bio/gui/qml/*.qml |
+            ForEach-Object {
+              pyside6-qmllint --unqualified disable --max-warnings 0 $_.FullName
+            }
+
+      - name: Check browser extension
+        run: |
+          node --check browser-extension/background.js
+          node --check browser-extension/content.js
+          node --check browser-extension/options.js
+          node --check browser-extension/page-player.js
+          node browser-extension/tests/content.test.cjs
+          node browser-extension/tests/options.test.cjs
+          node browser-extension/tests/page-player.test.cjs
+
       - name: Test
         run: pytest
-

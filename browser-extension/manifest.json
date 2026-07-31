@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Music Bio — Yandex Bridge",
+  "version": "0.2.3",
+  "description": "Передаёт текущий трек только со страниц Яндекс Музыки в локальное приложение Music Bio.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://music.yandex.ru/*",
+    "https://music.yandex.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://music.yandex.ru/*",
+        "https://music.yandex.com/*"
+      ],
+      "js": [
+        "page-player.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://music.yandex.ru/*",
+        "https://music.yandex.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Music Bio — настройки моста"
+  }
+}

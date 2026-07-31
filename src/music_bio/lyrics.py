@@ -47,23 +47,74 @@ def normalize_text(value: str) -> str:
     return " ".join(re.findall(r"\w+", value.casefold()))
 
 
+def get_lyric_context(
+    lines: list[LyricLine],
+    current_seconds: float,
+) -> tuple[str, str]:
+    current_text = ""
+    next_text = ""
+
+    for timestamp, text in lines:
+        if current_seconds < timestamp:
+            next_text = text
+            break
+        current_text = text
+
+    return current_text, next_text
+
+
 def find_best_matching_track(
     results: list[Any],
     target_artist: str,
     target_title: str,
 ) -> Any | None:
+    matches = find_matching_tracks(results, target_artist, target_title)
+    return matches[0] if matches else None
+
+
+def find_matching_tracks(
+    results: list[Any],
+    target_artist: str,
+    target_title: str,
+) -> list[Any]:
     expected_title = normalize_text(target_title)
     expected_artist = normalize_text(target_artist)
+    expected_artists = {
+        normalize_text(part)
+        for part in re.split(r"\s*(?:,|&|;|/|\bx\b|×)\s*", target_artist, flags=re.IGNORECASE)
+        if normalize_text(part)
+    }
+    matches: list[Any] = []
 
     for track in results[:10]:
         if normalize_text(track.title or "") != expected_title:
             continue
 
-        artists = {normalize_text(artist.name or "") for artist in (track.artists or [])}
-        if not expected_artist or expected_artist in artists:
-            return track
+        artists = {
+            normalize_text(artist.name or "")
+            for artist in (track.artists or [])
+            if normalize_text(artist.name or "")
+        }
+        combined_artist = normalize_text(" ".join(sorted(artists)))
+        if (
+            not expected_artist
+            or expected_artist in artists
+            or expected_artist == combined_artist
+            or (expected_artists and expected_artists.issubset(artists))
+        ):
+            matches.append(track)
 
-    return None
+    return sorted(
+        matches,
+        key=lambda track: bool(
+            getattr(
+                getattr(track, "lyrics_info", None),
+                "has_available_sync_lyrics",
+                False,
+            )
+        ),
+        reverse=True,
+    )
 
 
 class YandexLyricsProvider:
@@ -124,13 +175,19 @@ class YandexLyricsProvider:
             if not search or not search.tracks or not search.tracks.results:
                 return None, []
 
-            track = find_best_matching_track(search.tracks.results, artist, title)
-            if track is None:
+            matches = find_matching_tracks(search.tracks.results, artist, title)
+            if not matches:
                 logger.debug("Точное совпадение для %s — %s не найдено.", artist, title)
                 return None, []
 
-            track_id = str(track.id)
-            return track_id, self._load_lrc(track_id)
+            first_track_id = str(matches[0].id)
+            for track in matches:
+                track_id = str(track.id)
+                lines = self._load_lrc(track_id)
+                if lines:
+                    return track_id, lines
+
+            return first_track_id, []
 
         delay = 2.0
         for attempt in range(3):
@@ -154,9 +211,5 @@ class YandexLyricsProvider:
         lines: list[LyricLine],
         current_seconds: float,
     ) -> str:
-        current_text = ""
-        for timestamp, text in lines:
-            if current_seconds < timestamp:
-                break
-            current_text = text
+        current_text, _ = get_lyric_context(lines, current_seconds)
         return current_text
