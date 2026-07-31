@@ -3,6 +3,11 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+release/
+*.build/
+*.dist/
+*.onefile-build/
+MusicBio.exe
 
 .venv/
 venv/
@@ -25,4 +30,3 @@ htmlcov/
 
 Thumbs.db
 Desktop.ini
-

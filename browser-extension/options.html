@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Music Bio — браузерный мост</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <div class="logo">♫</div>
+        <div>
+          <h1>Music Bio Bridge</h1>
+          <p>Безопасное соединение с Яндекс Музыкой</p>
+        </div>
+      </div>
+
+      <div class="notice">
+        Расширение запускается только на <strong>music.yandex.ru</strong> и
+        отправляет данные только приложению на этом компьютере.
+      </div>
+
+      <label for="port">Порт локального моста</label>
+      <input id="port" type="number" min="1024" max="65535" value="8765">
+
+      <label for="token">Ключ моста</label>
+      <input id="token" type="password" autocomplete="off"
+             placeholder="Вставьте ключ из Music Bio">
+
+      <div class="actions">
+        <button id="save">Сохранить</button>
+        <button id="test" class="secondary">Проверить связь</button>
+      </div>
+
+      <p id="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -129,8 +129,59 @@ async def test_disconnect_after_restore_error(settings, telegram_client):
     await updater.start()
     await updater.update_bio("Playing track")
     client.side_effect = RuntimeError("Network error")
-    await updater.stop()
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await updater.stop()
 
+    client.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_restore_retries_after_transient_network_error(settings, telegram_client):
+    client, _ = telegram_client
+    updater = TelegramBioUpdater(settings)
+
+    await updater.start()
+    await updater.update_bio("Playing track")
+    client.side_effect = [RuntimeError("Proxy reconnect"), MagicMock()]
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as sleep:
+        await updater.stop()
+
+    restore_requests = [
+        call.args[0]
+        for call in client.call_args_list
+        if isinstance(call.args[0], UpdateProfileRequest) and call.args[0].about == "Original Bio"
+    ]
+    assert len(restore_requests) == 2
+    sleep.assert_awaited_once_with(1)
+    client.disconnect.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stop_event_does_not_cancel_restore_flood_wait(settings, telegram_client):
+    client, _ = telegram_client
+    updater = TelegramBioUpdater(settings)
+    stop_event = asyncio.Event()
+    updater.set_stop_event(stop_event)
+
+    await updater.start()
+    await updater.update_bio("Playing track")
+
+    flood_wait = FloodWaitError(request=None)
+    flood_wait.seconds = 1
+    client.side_effect = [flood_wait, MagicMock()]
+    stop_event.set()
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as sleep:
+        await updater.stop()
+
+    requests = [
+        call.args[0]
+        for call in client.call_args_list
+        if isinstance(call.args[0], UpdateProfileRequest)
+    ]
+    assert requests[-1].about == "Original Bio"
+    sleep.assert_awaited_once_with(2)
     client.disconnect.assert_awaited_once()
 
 
@@ -141,7 +192,7 @@ async def test_minimum_interval_and_force(settings, telegram_client):
 
     await updater.start()
     with patch(
-        "music_bio.telegram_bio.time.monotonic",
+        "music_bio.telegram_bio._monotonic",
         side_effect=[100.0, 105.0, 105.0],
     ):
         assert await updater.update_bio("Track 1")
@@ -164,6 +215,26 @@ async def test_flood_wait_retries_once(settings, telegram_client):
         assert await updater.update_bio("Playing track")
 
     sleep.assert_awaited_once_with(2)
+    await updater.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_event_interrupts_flood_wait(settings, telegram_client):
+    client, _ = telegram_client
+    updater = TelegramBioUpdater(settings)
+    stop_event = asyncio.Event()
+    updater.set_stop_event(stop_event)
+
+    await updater.start()
+    flood_wait = FloodWaitError(request=None)
+    flood_wait.seconds = 600
+    client.side_effect = flood_wait
+
+    update_task = asyncio.create_task(updater.update_bio("Playing track"))
+    await asyncio.sleep(0)
+    stop_event.set()
+
+    assert not await asyncio.wait_for(update_task, timeout=0.5)
     await updater.stop()
 
 

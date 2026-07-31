@@ -1,11 +1,21 @@
 import logging
 import sys
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
-from music_bio.models import MediaTrack
+from music_bio.models import AppEvent, EventCallback, MediaTrack, Settings, SourceMode
 
 logger = logging.getLogger(__name__)
+
+_GENERIC_BROWSER_IDS = (
+    "chrome",
+    "msedge",
+    "firefox",
+    "opera",
+    "brave",
+    "vivaldi",
+    "arc.exe",
+)
 
 if sys.platform == "win32":
     from winsdk.windows.media.control import (
@@ -19,13 +29,18 @@ else:
     PlaybackStatus = Any
 
 
+class TrackSource(Protocol):
+    async def start(self) -> None: ...
+
+    async def get_active_track(self) -> MediaTrack | None: ...
+
+    async def stop(self) -> None: ...
+
+
 class WindowsMediaMonitor:
     def __init__(self, source_hints: list[str] | None = None) -> None:
-        self._source_hints = source_hints or [
-            "yandexmusic",
-            "yandex.music",
-            "yandex_music",
-        ]
+        hints = source_hints or ["yandexmusic", "yandex.music", "yandex_music"]
+        self._source_hints = tuple(hint.casefold() for hint in hints)
         self._manager: MediaManager | None = None
 
     async def start(self) -> None:
@@ -33,6 +48,9 @@ class WindowsMediaMonitor:
             raise RuntimeError("WindowsMediaMonitor работает только в Windows.")
         if self._manager is None:
             self._manager = await MediaManager.request_async()
+
+    async def stop(self) -> None:
+        self._manager = None
 
     async def get_all_sessions(self) -> list[dict[str, Any]]:
         await self.start()
@@ -60,6 +78,7 @@ class WindowsMediaMonitor:
                     "playback_status": status,
                     "title": title,
                     "artist": artist,
+                    "is_yandex": self._matches_app_id(app_id),
                 }
             )
 
@@ -70,11 +89,15 @@ class WindowsMediaMonitor:
         assert self._manager is not None
 
         for session in self._manager.get_sessions():
-            if not await self._matches_source(session):
+            app_id = session.source_app_user_model_id or ""
+            if not self._matches_app_id(app_id):
                 continue
 
             playback = session.get_playback_info()
-            if not playback or playback.playback_status != PlaybackStatus.PLAYING:
+            if not playback or playback.playback_status not in {
+                PlaybackStatus.PLAYING,
+                PlaybackStatus.PAUSED,
+            }:
                 continue
 
             media = await session.try_get_media_properties_async()
@@ -86,27 +109,19 @@ class WindowsMediaMonitor:
                 title=media.title.strip(),
                 artist=media.artist.strip() if media.artist else "",
                 position=self._current_position(session, timeline),
-                app_id=session.source_app_user_model_id or "",
+                duration=max(0.0, timeline.end_time.total_seconds()),
+                app_id=app_id,
                 playback_status=self._status_name(playback.playback_status),
+                source_name="Приложение Яндекс Музыки",
             )
 
         return None
 
-    async def _matches_source(self, session: Any) -> bool:
-        app_id = (session.source_app_user_model_id or "").casefold()
-        if any(hint in app_id for hint in self._source_hints):
-            return True
-
-        try:
-            media = await session.try_get_media_properties_async()
-        except Exception:
+    def _matches_app_id(self, app_id: str) -> bool:
+        normalized = app_id.casefold()
+        if any(browser_id in normalized for browser_id in _GENERIC_BROWSER_IDS):
             return False
-
-        if not media or not media.title:
-            return False
-
-        title = media.title.casefold()
-        return "яндекс музыка" in title or "yandex music" in title
+        return any(hint in normalized for hint in self._source_hints)
 
     @staticmethod
     def _current_position(session: Any, timeline: Any) -> float:
@@ -118,8 +133,9 @@ class WindowsMediaMonitor:
                 updated_at = updated_at.replace(tzinfo=UTC)
             elapsed = (datetime.now(UTC) - updated_at.astimezone(UTC)).total_seconds()
             playback = session.get_playback_info()
-            rate = float(playback.playback_rate or 1.0) if playback else 1.0
-            position += max(0.0, elapsed) * rate
+            if playback and playback.playback_status == PlaybackStatus.PLAYING:
+                rate = float(playback.playback_rate or 1.0)
+                position += max(0.0, elapsed) * rate
 
         duration = timeline.end_time.total_seconds()
         if duration > 0:
@@ -133,3 +149,78 @@ class WindowsMediaMonitor:
         if name:
             return str(name).upper()
         return str(status).rsplit(".", 1)[-1].upper()
+
+
+class AutomaticTrackSource:
+    def __init__(self, sources: list[TrackSource]) -> None:
+        self._sources = sources
+        self._active_sources: list[TrackSource] = []
+
+    async def start(self) -> None:
+        self._active_sources = []
+        for source in self._sources:
+            try:
+                await source.start()
+            except Exception:
+                logger.exception(
+                    "Источник %s недоступен.",
+                    type(source).__name__,
+                )
+            else:
+                self._active_sources.append(source)
+        if not self._active_sources:
+            raise RuntimeError("Не удалось запустить ни один источник Яндекс Музыки.")
+
+    async def get_active_track(self) -> MediaTrack | None:
+        for source in self._active_sources:
+            try:
+                track = await source.get_active_track()
+            except Exception:
+                logger.exception(
+                    "Не удалось прочитать источник %s.",
+                    type(source).__name__,
+                )
+                continue
+            if track is not None:
+                return track
+        return None
+
+    async def stop(self) -> None:
+        for source in reversed(self._active_sources):
+            try:
+                await source.stop()
+            except Exception:
+                logger.exception("Не удалось остановить источник музыки.")
+        self._active_sources = []
+
+
+def create_track_source(
+    settings: Settings,
+    event_callback: EventCallback | None = None,
+) -> TrackSource:
+    desktop = WindowsMediaMonitor(settings.source_hints)
+    if settings.source_mode == SourceMode.DESKTOP:
+        return desktop
+
+    from music_bio.browser_bridge import BrowserBridgeSource
+
+    def report_browser_status(connected: bool, message: str) -> None:
+        if event_callback is None:
+            return
+        event_callback(
+            AppEvent(
+                kind="connection",
+                service="browser",
+                connected=connected,
+                message=message,
+            )
+        )
+
+    browser = BrowserBridgeSource(
+        port=settings.browser_bridge_port,
+        token=settings.browser_bridge_token,
+        status_callback=report_browser_status,
+    )
+    if settings.source_mode == SourceMode.BROWSER:
+        return browser
+    return AutomaticTrackSource([browser, desktop])

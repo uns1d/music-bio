@@ -9,15 +9,19 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QUICK_BACKEND: software
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -36,6 +40,23 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
+      - name: Check QML
+        shell: pwsh
+        run: |
+          Get-ChildItem src/music_bio/gui/qml/*.qml |
+            ForEach-Object {
+              pyside6-qmllint --unqualified disable --max-warnings 0 $_.FullName
+            }
+
+      - name: Check browser extension
+        run: |
+          node --check browser-extension/background.js
+          node --check browser-extension/content.js
+          node --check browser-extension/options.js
+          node --check browser-extension/page-player.js
+          node browser-extension/tests/content.test.cjs
+          node browser-extension/tests/options.test.cjs
+          node browser-extension/tests/page-player.test.cjs
+
       - name: Test
         run: pytest
-
